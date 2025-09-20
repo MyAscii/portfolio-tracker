@@ -1,0 +1,155 @@
+name: Portfolio Price Tracker
+
+on:
+  schedule:
+    # Run every hour at minute 0
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual triggering
+    inputs:
+      debug_enabled:
+        description: 'Enable debug mode'
+        required: false
+        default: 'false'
+        type: boolean
+  push:
+    branches: [ main, 'feature/*' ]
+    paths:
+      - 'portfolio.csv'
+      - 'src/portfolio_tracker/**'
+      - 'src/main.py'
+      - '.github/workflows/portfolio-tracker.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'portfolio.csv'
+      - 'src/portfolio_tracker/**'
+      - 'src/main.py'
+      - '.github/workflows/portfolio-tracker.yml'
+
+jobs:
+  track-prices:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install Playwright browsers
+      run: |
+        playwright install chromium
+        playwright install-deps
+
+    - name: Create data directory
+      run: |
+        mkdir -p data
+        echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+
+    - name: Run portfolio tracker
+      run: |
+        python src/main.py
+
+    - name: Upload tracking data and logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: portfolio-tracker-data-${{ github.run_number }}
+        path: |
+          data/
+          *.log
+        retention-days: 30
+
+    - name: Notify on failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '❌ Portfolio tracking failed! Check the logs for details.'
+          })
+
+  # Optional: Create a summary job
+  create-summary:
+    needs: track-prices
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Generate tracking summary
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        from portfolio_tracker.csv_storage import CSVStorageManager
+        from datetime import datetime, timedelta
+        
+        storage = CSVStorageManager('data')
+        
+        # Get recent tracking data (last 2 hours)
+        recent_tracks = storage.get_recent_price_records(hours=2)
+        
+        current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+        print(f'📊 Portfolio Tracking Summary - {current_time}')
+        print('=' * 60)
+        print(f'✅ Items tracked: {len(recent_tracks)}')
+        print()
+        
+        # Group by item for better display
+        items_tracked = {}
+        for track in recent_tracks:
+            item_name = track['item_name']
+            if item_name not in items_tracked:
+                items_tracked[item_name] = []
+            items_tracked[item_name].append(track)
+        
+        for item_name, tracks in items_tracked.items():
+            # Get the most recent track for this item
+            latest_track = max(tracks, key=lambda x: x['scraped_at'])
+            status = '✅' if latest_track['scrape_status'] == 'success' else '❌'
+            price = latest_track['from_price'] or 'N/A'
+            trend = latest_track['price_trend'] or 'N/A'
+            scraped_time = latest_track['scraped_at'][:16]  # Show date and time without seconds
+            
+            print(f'{status} {item_name}:')
+            print(f'   💰 Price: €{price}')
+            print(f'   📈 Trend: €{trend}')
+            print(f'   🕒 Last updated: {scraped_time}')
+            print()
+        
+        if not recent_tracks:
+            print('ℹ️  No recent tracking data found (last 2 hours)')
+            print('   This might be normal if tracking runs less frequently.')
+        " >> $GITHUB_STEP_SUMMARY
