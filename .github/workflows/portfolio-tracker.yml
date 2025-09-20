@@ -29,6 +29,8 @@ on:
 jobs:
   track-prices:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -93,25 +95,28 @@ jobs:
 
     - name: Notify on failure
       if: failure()
-      uses: actions/github-script@v6
-      with:
-        script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '❌ Portfolio tracking failed! Check the logs for details.'
-          })
+      run: |
+        echo "❌ Portfolio tracking failed! Check the logs for details." >> $GITHUB_STEP_SUMMARY
+        echo "::error::Portfolio tracking workflow failed"
 
   # Optional: Create a summary job
   create-summary:
     needs: track-prices
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Pull latest changes
+      run: |
+        git pull origin ${{ github.ref_name }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
