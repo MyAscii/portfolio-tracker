@@ -78,9 +78,15 @@ jobs:
           echo "No changes to commit"
         else
           git commit -m "Update portfolio tracking data - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          # Pull latest changes and rebase our commit on top
-          git pull --rebase origin main
-          git push
+          # Use merge strategy instead of rebase to handle conflicts better
+          git pull origin main --no-rebase || {
+            echo "Merge conflict detected, attempting to resolve..."
+            # For CSV files, prefer the automated data (ours) over manual changes
+            git checkout --ours data/*.csv
+            git add data/*.csv
+            git commit --no-edit
+          }
+          git push origin main
         fi
 
     - name: Upload tracking data and logs
@@ -98,12 +104,25 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '❌ Portfolio tracking failed! Check the logs for details.'
-          })
+          // Create a workflow run comment instead of issue comment
+          console.log('❌ Portfolio tracking workflow failed!');
+          console.log('Run ID:', context.runId);
+          console.log('Check the logs for details at:', `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`);
+          
+          // Optionally create a repository dispatch event for notifications
+          try {
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'portfolio-tracking-failed',
+              client_payload: {
+                run_id: context.runId,
+                message: 'Portfolio tracking workflow failed'
+              }
+            });
+          } catch (error) {
+            console.log('Could not create dispatch event:', error.message);
+          }
 
   # Optional: Create a summary job
   create-summary:
