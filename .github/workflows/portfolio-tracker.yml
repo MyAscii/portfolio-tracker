@@ -26,6 +26,12 @@ on:
       - 'src/main.py'
       - '.github/workflows/portfolio-tracker.yml'
 
+# Grant necessary permissions for the workflow
+permissions:
+  contents: write        # Required to push changes to repository
+  actions: read          # Required to read workflow information
+  repository-projects: read  # Required for repository access
+
 jobs:
   track-prices:
     runs-on: ubuntu-latest
@@ -70,9 +76,14 @@ jobs:
         python src/main.py
 
     - name: Commit and push updated CSV files
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # Configure git with the GitHub token for authentication
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
+        git config --local url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        
         git add data/*.csv
         if git diff --staged --quiet; then
           echo "No changes to commit"
