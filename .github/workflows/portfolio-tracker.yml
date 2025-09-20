@@ -66,6 +66,18 @@ jobs:
       run: |
         python src/main.py
 
+    - name: Commit and push updated CSV files
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/*.csv
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update portfolio tracking data - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push
+        fi
+
     - name: Upload tracking data and logs
       if: always()
       uses: actions/upload-artifact@v4
@@ -97,6 +109,13 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Pull latest changes
+      run: |
+        git pull origin ${{ github.ref_name }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
