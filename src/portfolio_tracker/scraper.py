@@ -19,12 +19,23 @@ class CardMarketScraper:
     def __init__(self):
         self.base_url = "https://www.cardmarket.com"
         self.user_agents = [
+            # Chrome on Windows
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+            # Chrome on Mac
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            # Safari on Mac
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+            # Firefox on Windows
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0',
+            # Chrome on Linux
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+            # Edge on Windows
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
         ]
         self.is_github_actions = os.getenv('GITHUB_ACTIONS') == 'true'
         logger.info(f"[INIT] Running in GitHub Actions: {self.is_github_actions}")
@@ -67,7 +78,7 @@ class CardMarketScraper:
         
         async with async_playwright() as p:
             try:
-                # Enhanced browser launch args for GitHub Actions
+                # Enhanced browser arguments for GitHub Actions with Cloudflare bypass
                 browser_args = [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -75,22 +86,42 @@ class CardMarketScraper:
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
                     '--no-zygote',
+                    '--single-process',
                     '--disable-gpu',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor',
+                    '--disable-extensions',
+                    '--disable-plugins',
+                    '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-translate',
+                    '--hide-scrollbars',
+                    '--mute-audio',
+                    '--no-default-browser-check',
+                    '--no-pings',
+                    '--disable-background-networking',
                     '--disable-background-timer-throttling',
+                    '--disable-client-side-phishing-detection',
+                    '--disable-component-extensions-with-background-pages',
+                    '--disable-hang-monitor',
+                    '--disable-prompt-on-repost',
+                    '--disable-web-resources',
+                    '--enable-automation=false',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-extensions-except',
+                    '--disable-plugins-discovery',
                     '--disable-backgrounding-occluded-windows',
                     '--disable-renderer-backgrounding',
-                    '--disable-features=TranslateUI',
-                    '--disable-ipc-flooding-protection'
+                    '--disable-ipc-flooding-protection',
+                    '--disable-domain-reliability',
+                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
                 ]
                 
-                # Additional args for GitHub Actions
+                # Additional args for GitHub Actions (remove duplicates)
                 if self.is_github_actions:
                     browser_args.extend([
-                        '--disable-extensions',
-                        '--disable-plugins',
-                        '--disable-images',
-                        '--disable-javascript',
-                        '--disable-default-apps'
+                        '--disable-features=TranslateUI',
+                        '--force-device-scale-factor=1'
                     ])
                     logger.info("[DEBUG] Added GitHub Actions specific browser args")
                 
@@ -99,7 +130,7 @@ class CardMarketScraper:
                     args=browser_args
                 )
                 
-                # Create context with randomized settings
+                # Create context with randomized settings and stealth mode
                 context = await browser.new_context(
                     viewport={
                         'width': random.randint(1200, 1920), 
@@ -107,9 +138,92 @@ class CardMarketScraper:
                     },
                     user_agent=user_agent,
                     extra_http_headers=headers,
+                    java_script_enabled=True,
+                    accept_downloads=False,
+                    ignore_https_errors=True,
                     locale='en-US',
-                    timezone_id='America/New_York'
+                    timezone_id='America/New_York',
+                    geolocation={'latitude': 40.7128, 'longitude': -74.0060},
+                    permissions=['geolocation']
                 )
+                
+                # Add comprehensive stealth mode scripts to mask automation
+                await context.add_init_script("""
+                     // Remove webdriver property
+                     Object.defineProperty(navigator, 'webdriver', {
+                         get: () => undefined,
+                     });
+                     
+                     // Remove automation indicators
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+                     
+                     // Mock chrome property
+                     window.chrome = {
+                         runtime: {},
+                         loadTimes: function() {},
+                         csi: function() {},
+                         app: {
+                             isInstalled: false,
+                         }
+                     };
+                     
+                     // Mock realistic plugins
+                     Object.defineProperty(navigator, 'plugins', {
+                         get: () => ({
+                             length: 3,
+                             0: { name: 'Chrome PDF Plugin' },
+                             1: { name: 'Chrome PDF Viewer' },
+                             2: { name: 'Native Client' }
+                         }),
+                     });
+                     
+                     // Mock languages
+                     Object.defineProperty(navigator, 'languages', {
+                         get: () => ['en-US', 'en'],
+                     });
+                     
+                     // Mock hardware concurrency
+                     Object.defineProperty(navigator, 'hardwareConcurrency', {
+                         get: () => 4,
+                     });
+                     
+                     // Mock device memory
+                     Object.defineProperty(navigator, 'deviceMemory', {
+                         get: () => 8,
+                     });
+                     
+                     // Override permissions
+                     const originalQuery = window.navigator.permissions.query;
+                     window.navigator.permissions.query = (parameters) => (
+                         parameters.name === 'notifications' ?
+                             Promise.resolve({ state: Notification.permission }) :
+                             originalQuery(parameters)
+                     );
+                     
+                     // Mock screen properties
+                     Object.defineProperty(screen, 'colorDepth', {
+                         get: () => 24,
+                     });
+                     
+                     Object.defineProperty(screen, 'pixelDepth', {
+                         get: () => 24,
+                     });
+                     
+                     // Hide automation from iframe detection
+                     Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+                         get: function() {
+                             return window;
+                         }
+                     });
+                     
+                     // Mock Date.prototype.getTimezoneOffset
+                     const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+                     Date.prototype.getTimezoneOffset = function() {
+                         return 300; // EST timezone
+                     };
+                 """)
                 
                 page = await context.new_page()
                 
@@ -148,10 +262,36 @@ class CardMarketScraper:
                 delay = random.uniform(2, 4) if self.is_github_actions else random.uniform(1, 2)
                 await asyncio.sleep(delay)
                 
-                # Step 3: Navigate to product page
+                # Step 3: Navigate to product page with Cloudflare handling
                 logger.info(f"[DEBUG] Step 3: Visiting product page: {item_url}")
-                response = await page.goto(item_url, wait_until='domcontentloaded')
+                response = await page.goto(item_url, wait_until='domcontentloaded', timeout=30000)
                 logger.info(f"[DEBUG] Product page response: {response.status}")
+                
+                # Handle Cloudflare challenges
+                if response.status == 403 or 'cf-mitigated' in dict(response.headers):
+                    logger.info("[DEBUG] Detected Cloudflare challenge, waiting for resolution...")
+                    
+                    # Wait for potential challenge resolution
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15000)
+                        await asyncio.sleep(3)  # Additional wait for JS execution
+                        
+                        # Check if we're still on a challenge page
+                        page_content = await page.content()
+                        if any(indicator in page_content.lower() for indicator in [
+                            'checking your browser', 'cloudflare', 'ddos protection', 
+                            'security check', 'please wait', 'ray id', 'challenge'
+                        ]):
+                            logger.info("[DEBUG] Still on challenge page, waiting longer...")
+                            await asyncio.sleep(5)
+                            
+                            # Try to reload the page
+                            logger.info("[DEBUG] Attempting page reload after challenge...")
+                            response = await page.reload(wait_until="domcontentloaded", timeout=30000)
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            
+                    except Exception as e:
+                        logger.warning(f"[DEBUG] Challenge handling failed: {e}")
                 
                 if response.status != 200:
                     error_msg = f"HTTP {response.status}"
