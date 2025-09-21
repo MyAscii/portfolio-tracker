@@ -137,7 +137,33 @@ class CardMarketScraper:
                         'height': random.randint(800, 1080)
                     },
                     user_agent=user_agent,
-                    extra_http_headers=headers,
+                    extra_http_headers={
+                        **headers,
+                        # Override sec-ch-ua headers to mask headless detection with realistic values
+                        'sec-ch-ua': '"Google Chrome";v="130", "Chromium";v="130", "Not?A_Brand";v="99"',
+                        'sec-ch-ua-arch': '"x64"',
+                        'sec-ch-ua-bitness': '"64"',
+                        'sec-ch-ua-full-version': '"130.0.6723.70"',
+                        'sec-ch-ua-full-version-list': '"Google Chrome";v="130.0.6723.70", "Chromium";v="130.0.6723.70", "Not?A_Brand";v="99.0.0.0"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-model': '""',
+                        'sec-ch-ua-platform': '"Windows"',
+                        'sec-ch-ua-platform-version': '"15.0.0"',
+                        'sec-ch-ua-wow64': '?0',
+                        # Additional realistic headers
+                        'sec-ch-prefers-color-scheme': 'light',
+                        'sec-ch-prefers-reduced-motion': 'no-preference',
+                        'sec-ch-viewport-width': '1920',
+                        'sec-ch-device-memory': '8',
+                        'sec-ch-dpr': '1',
+                        'viewport-width': '1920',
+                        'dpr': '1',
+                        # Browser hints
+                        'save-data': 'off',
+                        'downlink': '10',
+                        'ect': '4g',
+                        'rtt': '50'
+                    },
                     java_script_enabled=True,
                     accept_downloads=False,
                     ignore_https_errors=True,
@@ -148,7 +174,7 @@ class CardMarketScraper:
                 )
                 
                 # Add comprehensive stealth mode scripts to mask automation
-                await context.add_init_script("""
+                 await context.add_init_script("""
                      // Remove webdriver property
                      Object.defineProperty(navigator, 'webdriver', {
                          get: () => undefined,
@@ -159,13 +185,53 @@ class CardMarketScraper:
                      delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
                      delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
                      
-                     // Mock chrome property
+                     // Remove additional automation indicators
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_Object;
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_JSON;
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_Function;
+                     delete window.cdc_adoQpoasnfa76pfcZLmcfl_String;
+                     
+                     // Mock chrome property with realistic values
                      window.chrome = {
-                         runtime: {},
-                         loadTimes: function() {},
-                         csi: function() {},
+                         runtime: {
+                             onConnect: null,
+                             onMessage: null
+                         },
+                         loadTimes: function() {
+                             return {
+                                 requestTime: Date.now() / 1000 - Math.random(),
+                                 startLoadTime: Date.now() / 1000 - Math.random(),
+                                 commitLoadTime: Date.now() / 1000 - Math.random(),
+                                 finishDocumentLoadTime: Date.now() / 1000 - Math.random(),
+                                 finishLoadTime: Date.now() / 1000 - Math.random(),
+                                 firstPaintTime: Date.now() / 1000 - Math.random(),
+                                 firstPaintAfterLoadTime: 0,
+                                 navigationType: 'Other',
+                                 wasFetchedViaSpdy: false,
+                                 wasNpnNegotiated: false,
+                                 npnNegotiatedProtocol: 'unknown',
+                                 wasAlternateProtocolAvailable: false,
+                                 connectionInfo: 'http/1.1'
+                             };
+                         },
+                         csi: function() {
+                             return {
+                                 pageT: Date.now(),
+                                 tran: 15
+                             };
+                         },
                          app: {
                              isInstalled: false,
+                             InstallState: {
+                                 DISABLED: 'disabled',
+                                 INSTALLED: 'installed',
+                                 NOT_INSTALLED: 'not_installed'
+                             },
+                             RunningState: {
+                                 CANNOT_RUN: 'cannot_run',
+                                 READY_TO_RUN: 'ready_to_run',
+                                 RUNNING: 'running'
+                             }
                          }
                      };
                      
@@ -173,9 +239,21 @@ class CardMarketScraper:
                      Object.defineProperty(navigator, 'plugins', {
                          get: () => ({
                              length: 3,
-                             0: { name: 'Chrome PDF Plugin' },
-                             1: { name: 'Chrome PDF Viewer' },
-                             2: { name: 'Native Client' }
+                             0: { 
+                                 name: 'Chrome PDF Plugin',
+                                 filename: 'internal-pdf-viewer',
+                                 description: 'Portable Document Format'
+                             },
+                             1: { 
+                                 name: 'Chrome PDF Viewer',
+                                 filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                                 description: ''
+                             },
+                             2: { 
+                                 name: 'Native Client',
+                                 filename: 'internal-nacl-plugin',
+                                 description: ''
+                             }
                          }),
                      });
                      
@@ -192,6 +270,15 @@ class CardMarketScraper:
                      // Mock device memory
                      Object.defineProperty(navigator, 'deviceMemory', {
                          get: () => 8,
+                     });
+                     
+                     // Mock connection
+                     Object.defineProperty(navigator, 'connection', {
+                         get: () => ({
+                             effectiveType: '4g',
+                             rtt: 50,
+                             downlink: 10
+                         }),
                      });
                      
                      // Override permissions
@@ -211,6 +298,15 @@ class CardMarketScraper:
                          get: () => 24,
                      });
                      
+                     // Mock realistic screen resolution
+                     Object.defineProperty(screen, 'availWidth', {
+                         get: () => 1920,
+                     });
+                     
+                     Object.defineProperty(screen, 'availHeight', {
+                         get: () => 1040,
+                     });
+                     
                      // Hide automation from iframe detection
                      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
                          get: function() {
@@ -223,6 +319,36 @@ class CardMarketScraper:
                      Date.prototype.getTimezoneOffset = function() {
                          return 300; // EST timezone
                      };
+                     
+                     // Override toString methods to hide proxy
+                     Function.prototype.toString = new Proxy(Function.prototype.toString, {
+                         apply: function(target, thisArg, argumentsList) {
+                             if (thisArg === navigator.webdriver) {
+                                 return 'function webdriver() { [native code] }';
+                             }
+                             return target.apply(thisArg, argumentsList);
+                         }
+                     });
+                     
+                     // Mock battery API
+                     Object.defineProperty(navigator, 'getBattery', {
+                         get: () => () => Promise.resolve({
+                             charging: true,
+                             chargingTime: 0,
+                             dischargingTime: Infinity,
+                             level: 1
+                         }),
+                     });
+                     
+                     // Mock media devices
+                     Object.defineProperty(navigator, 'mediaDevices', {
+                         get: () => ({
+                             enumerateDevices: () => Promise.resolve([
+                                 { deviceId: 'default', kind: 'audioinput', label: 'Default - Microphone' },
+                                 { deviceId: 'default', kind: 'audiooutput', label: 'Default - Speaker' }
+                             ])
+                         }),
+                     });
                  """)
                 
                 page = await context.new_page()
