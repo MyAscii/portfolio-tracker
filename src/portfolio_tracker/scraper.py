@@ -174,7 +174,7 @@ class CardMarketScraper:
                 )
                 
                 # Add comprehensive stealth mode scripts to mask automation
-                 await context.add_init_script("""
+                await context.add_init_script("""
                      // Remove webdriver property
                      Object.defineProperty(navigator, 'webdriver', {
                          get: () => undefined,
