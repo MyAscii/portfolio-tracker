@@ -4,6 +4,8 @@ import re
 import asyncio
 import random
 import logging
+import os
+import aiohttp
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from playwright.async_api import async_playwright
@@ -16,57 +18,160 @@ class CardMarketScraper:
     
     def __init__(self):
         self.base_url = "https://www.cardmarket.com"
-        self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+        ]
+        self.is_github_actions = os.getenv('GITHUB_ACTIONS') == 'true'
+        logger.info(f"[INIT] Running in GitHub Actions: {self.is_github_actions}")
+    
+    def _get_random_user_agent(self) -> str:
+        """Get a random user agent"""
+        return random.choice(self.user_agents)
+    
+    def _get_random_headers(self) -> Dict[str, str]:
+        """Get randomized headers to mimic real browser behavior"""
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': random.choice([
+                'en-US,en;q=0.9',
+                'en-GB,en;q=0.9',
+                'en-US,en;q=0.9,de;q=0.8',
+                'en-US,en;q=0.9,fr;q=0.8'
+            ]),
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
+        }
+        return headers
     
     async def scrape_item_price(self, item_url: str) -> Dict[str, Any]:
         """Scrape price data for a single item"""
         logger.info(f"[SCRAPE] Scraping: {item_url}")
+        logger.info(f"[DEBUG] GitHub Actions: {self.is_github_actions}")
+        
+        # Get random user agent and headers for this request
+        user_agent = self._get_random_user_agent()
+        headers = self._get_random_headers()
+        logger.info(f"[DEBUG] Using User-Agent: {user_agent[:50]}...")
         
         async with async_playwright() as p:
             try:
-                # Launch browser with stealth settings
+                # Enhanced browser launch args for GitHub Actions
+                browser_args = [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-features=TranslateUI',
+                    '--disable-ipc-flooding-protection'
+                ]
+                
+                # Additional args for GitHub Actions
+                if self.is_github_actions:
+                    browser_args.extend([
+                        '--disable-extensions',
+                        '--disable-plugins',
+                        '--disable-images',
+                        '--disable-javascript',
+                        '--disable-default-apps'
+                    ])
+                    logger.info("[DEBUG] Added GitHub Actions specific browser args")
+                
                 browser = await p.chromium.launch(
                     headless=True,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-accelerated-2d-canvas',
-                        '--no-first-run',
-                        '--no-zygote',
-                        '--disable-gpu'
-                    ]
+                    args=browser_args
                 )
                 
+                # Create context with randomized settings
                 context = await browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    user_agent=self.user_agent
+                    viewport={
+                        'width': random.randint(1200, 1920), 
+                        'height': random.randint(800, 1080)
+                    },
+                    user_agent=user_agent,
+                    extra_http_headers=headers,
+                    locale='en-US',
+                    timezone_id='America/New_York'
                 )
                 
                 page = await context.new_page()
                 
+                # Add request interception for debugging
+                async def handle_response(response):
+                    if response.url == item_url:
+                        logger.info(f"[DEBUG] Response status: {response.status}")
+                        logger.info(f"[DEBUG] Response headers: {dict(response.headers)}")
+                        if response.status == 403:
+                            logger.error(f"[DEBUG] 403 Forbidden for {response.url}")
+                            logger.error(f"[DEBUG] Request headers: {dict(response.request.headers)}")
+                
+                page.on('response', handle_response)
+                
                 # Determine game type from URL
                 game_type = "Magic" if "/Magic/" in item_url else "Pokemon"
+                logger.info(f"[DEBUG] Detected game type: {game_type}")
                 
-                # Step 1: Visit homepage
-                await page.goto(f'{self.base_url}/', wait_until='domcontentloaded')
+                # Step 1: Visit homepage with enhanced delays for GitHub Actions
+                logger.info(f"[DEBUG] Step 1: Visiting homepage")
+                homepage_response = await page.goto(f'{self.base_url}/', wait_until='domcontentloaded')
+                logger.info(f"[DEBUG] Homepage response: {homepage_response.status}")
                 await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(random.uniform(1, 2))
+                
+                # Longer delays for GitHub Actions
+                delay = random.uniform(2, 4) if self.is_github_actions else random.uniform(1, 2)
+                await asyncio.sleep(delay)
                 
                 # Step 2: Navigate to game section
                 game_url = f'{self.base_url}/en/{game_type}'
-                await page.goto(game_url, wait_until='domcontentloaded')
+                logger.info(f"[DEBUG] Step 2: Visiting game section: {game_url}")
+                game_response = await page.goto(game_url, wait_until='domcontentloaded')
+                logger.info(f"[DEBUG] Game section response: {game_response.status}")
                 await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(random.uniform(1, 2))
+                
+                delay = random.uniform(2, 4) if self.is_github_actions else random.uniform(1, 2)
+                await asyncio.sleep(delay)
                 
                 # Step 3: Navigate to product page
+                logger.info(f"[DEBUG] Step 3: Visiting product page: {item_url}")
                 response = await page.goto(item_url, wait_until='domcontentloaded')
+                logger.info(f"[DEBUG] Product page response: {response.status}")
                 
                 if response.status != 200:
-                    return {"status": "error", "error": f"HTTP {response.status}"}
+                    error_msg = f"HTTP {response.status}"
+                    logger.error(f"[ERROR] Non-200 response: {error_msg}")
+                    
+                    # Try to get more details about the error
+                    try:
+                        page_content = await page.content()
+                        if "403" in page_content or "Forbidden" in page_content:
+                            logger.error(f"[DEBUG] Page contains 403/Forbidden content")
+                        if "blocked" in page_content.lower() or "bot" in page_content.lower():
+                            logger.error(f"[DEBUG] Page indicates bot detection")
+                    except Exception as content_error:
+                        logger.error(f"[DEBUG] Could not read page content: {content_error}")
+                    
+                    return {"status": "error", "error": error_msg}
                 
                 await page.wait_for_load_state('networkidle')
-                await asyncio.sleep(random.uniform(1, 2))
+                delay = random.uniform(2, 4) if self.is_github_actions else random.uniform(1, 2)
+                await asyncio.sleep(delay)
                 
                 # Extract data
                 page_text = await page.content()
@@ -102,8 +207,102 @@ class CardMarketScraper:
                 return result
                 
             except Exception as e:
-                logger.error(f"[ERROR] Error scraping {item_url}: {e}")
-                return {"status": "error", "error": str(e)}
+                error_msg = str(e)
+                logger.error(f"[ERROR] Error scraping {item_url}: {error_msg}")
+                
+                # Enhanced error logging for debugging
+                if "403" in error_msg or "Forbidden" in error_msg:
+                    logger.error(f"[DEBUG] 403 Forbidden error detected")
+                    logger.error(f"[DEBUG] User agent used: {user_agent}")
+                    logger.error(f"[DEBUG] GitHub Actions: {self.is_github_actions}")
+                elif "timeout" in error_msg.lower():
+                    logger.error(f"[DEBUG] Timeout error - may need longer delays")
+                elif "connection" in error_msg.lower():
+                    logger.error(f"[DEBUG] Connection error - network issue")
+                
+                return {"status": "error", "error": error_msg}
+            
+            finally:
+                try:
+                    await browser.close()
+                    logger.info(f"[DEBUG] Browser closed successfully")
+                except Exception as close_error:
+                     logger.warning(f"[DEBUG] Error closing browser: {close_error}")
+    
+    async def _fallback_http_scrape(self, item_url: str) -> Dict[str, Any]:
+        """Fallback HTTP-based scraping when browser method fails"""
+        logger.info(f"[FALLBACK] Attempting HTTP fallback for: {item_url}")
+        
+        user_agent = self._get_random_user_agent()
+        headers = self._get_random_headers()
+        headers['User-Agent'] = user_agent
+        
+        try:
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # Add random delay
+                await asyncio.sleep(random.uniform(1, 3))
+                
+                async with session.get(item_url, headers=headers) as response:
+                    logger.info(f"[FALLBACK] HTTP response status: {response.status}")
+                    
+                    if response.status == 403:
+                        logger.error(f"[FALLBACK] HTTP 403 - also blocked via direct HTTP")
+                        return {"status": "error", "error": "HTTP 403"}
+                    elif response.status != 200:
+                        return {"status": "error", "error": f"HTTP {response.status}"}
+                    
+                    content = await response.text()
+                    logger.info(f"[FALLBACK] Retrieved {len(content)} characters")
+                    
+                    # Try to extract basic data from HTML
+                    available_items = self._extract_number(content, r'Available items</dt><dd[^>]*>(\d+)</dd>')
+                    from_price = self._extract_price(content, r'From</dt><dd[^>]*>([\d,]+\.?\d*)\s*€</dd>')
+                    
+                    if available_items is not None or from_price is not None:
+                        logger.info(f"[FALLBACK] Successfully extracted some data")
+                        return {
+                            "status": "success",
+                            "available_items": available_items,
+                            "from_price": from_price,
+                            "price_trend": None,
+                            "avg_30_days": None,
+                            "avg_7_days": None,
+                            "avg_1_day": None,
+                            "seller_prices": [],
+                            "min_seller_price": None,
+                            "max_seller_price": None,
+                            "seller_count": 0,
+                            "scraped_at": datetime.utcnow(),
+                            "method": "http_fallback"
+                        }
+                    else:
+                        logger.warning(f"[FALLBACK] Could not extract data from HTTP response")
+                        return {"status": "error", "error": "No data extracted"}
+                        
+        except Exception as e:
+            logger.error(f"[FALLBACK] HTTP fallback failed: {e}")
+            return {"status": "error", "error": f"Fallback failed: {str(e)}"}
+    
+    async def scrape_with_fallback(self, item_url: str) -> Dict[str, Any]:
+        """Main scraping method with fallback support"""
+        # Try browser-based scraping first
+        result = await self.scrape_item_price(item_url)
+        
+        # If browser method fails with 403, try HTTP fallback
+        if result.get("status") == "error" and "403" in str(result.get("error", "")):
+            logger.info(f"[FALLBACK] Browser method failed with 403, trying HTTP fallback")
+            fallback_result = await self._fallback_http_scrape(item_url)
+            
+            # If fallback also fails, return original error with more context
+            if fallback_result.get("status") == "error":
+                result["error"] = f"Browser: {result.get('error')}, Fallback: {fallback_result.get('error')}"
+                logger.error(f"[FALLBACK] Both methods failed for {item_url}")
+            else:
+                logger.info(f"[FALLBACK] HTTP fallback succeeded for {item_url}")
+                return fallback_result
+        
+        return result
     
     def _extract_number(self, text: str, pattern: str) -> Optional[int]:
         """Extract number using regex pattern"""

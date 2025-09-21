@@ -84,7 +84,7 @@ class PortfolioTracker:
         for item in stored_items:
             try:
                 logger.info(f"[TRACK] Tracking: {item['name']}")
-                price_data = await self.scraper.scrape_item_price(item['link'])
+                price_data = await self.scraper.scrape_with_fallback(item['link'])
                 self.storage_manager.save_price_data(int(item['id']), item['name'], price_data)
                 
                 # Add delay between requests
