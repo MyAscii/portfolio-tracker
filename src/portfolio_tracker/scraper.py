@@ -6,7 +6,9 @@ import random
 import logging
 import os
 import aiohttp
-from typing import Dict, Any, List, Optional
+import json
+import hashlib
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from playwright.async_api import async_playwright
 
