@@ -1,202 +1,202 @@
-name: Portfolio Price Tracker
+# name: Portfolio Price Tracker
 
-on:
-  schedule:
-    # Run every hour at minute 0
-    - cron: '0 * * * *'
-  workflow_dispatch: # Allow manual triggering
-    inputs:
-      debug_enabled:
-        description: 'Enable debug mode'
-        required: false
-        default: 'false'
-        type: boolean
-  push:
-    branches: [ main, 'feature/*' ]
-    paths:
-      - 'portfolio.csv'
-      - 'src/portfolio_tracker/**'
-      - 'src/main.py'
-      - '.github/workflows/portfolio-tracker.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'portfolio.csv'
-      - 'src/portfolio_tracker/**'
-      - 'src/main.py'
-      - '.github/workflows/portfolio-tracker.yml'
+# on:
+#   schedule:
+#     # Run every hour at minute 0
+#     - cron: '0 * * * *'
+#   workflow_dispatch: # Allow manual triggering
+#     inputs:
+#       debug_enabled:
+#         description: 'Enable debug mode'
+#         required: false
+#         default: 'false'
+#         type: boolean
+#   push:
+#     branches: [ main, 'feature/*' ]
+#     paths:
+#       - 'portfolio.csv'
+#       - 'src/portfolio_tracker/**'
+#       - 'src/main.py'
+#       - '.github/workflows/portfolio-tracker.yml'
+#   pull_request:
+#     branches: [ main ]
+#     paths:
+#       - 'portfolio.csv'
+#       - 'src/portfolio_tracker/**'
+#       - 'src/main.py'
+#       - '.github/workflows/portfolio-tracker.yml'
 
-# Grant necessary permissions for the workflow
-permissions:
-  contents: write        # Required to push changes to repository
-  actions: read          # Required to read workflow information
-  repository-projects: read  # Required for repository access
+# # Grant necessary permissions for the workflow
+# permissions:
+#   contents: write        # Required to push changes to repository
+#   actions: read          # Required to read workflow information
+#   repository-projects: read  # Required for repository access
 
-jobs:
-  track-prices:
-    runs-on: ubuntu-latest
+# jobs:
+#   track-prices:
+#     runs-on: ubuntu-latest
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
+#     steps:
+#     - name: Checkout repository
+#       uses: actions/checkout@v4
+#       with:
+#         token: ${{ secrets.GITHUB_TOKEN }}
+#         fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+#     - name: Set up Python
+#       uses: actions/setup-python@v5
+#       with:
+#         python-version: '3.11'
 
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+#     - name: Cache pip dependencies
+#       uses: actions/cache@v4
+#       with:
+#         path: ~/.cache/pip
+#         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+#         restore-keys: |
+#           ${{ runner.os }}-pip-
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+#     - name: Install dependencies
+#       run: |
+#         python -m pip install --upgrade pip
+#         pip install -r requirements.txt
 
-    - name: Install Playwright browsers
-      run: |
-        playwright install chromium
-        playwright install-deps
+#     - name: Install Playwright browsers
+#       run: |
+#         playwright install chromium
+#         playwright install-deps
 
-    - name: Create data directory
-      run: |
-        mkdir -p data
-        echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+#     - name: Create data directory
+#       run: |
+#         mkdir -p data
+#         echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
 
-    - name: Run portfolio tracker
-      run: |
-        python src/main.py
+#     - name: Run portfolio tracker
+#       run: |
+#         python src/main.py
 
-    - name: Commit and push updated CSV files
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Configure git with the GitHub token for authentication
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git config --local url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+#     - name: Commit and push updated CSV files
+#       env:
+#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#       run: |
+#         # Configure git with the GitHub token for authentication
+#         git config --local user.email "action@github.com"
+#         git config --local user.name "GitHub Action"
+#         git config --local url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
         
-        git add data/*.csv
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "Update portfolio tracking data - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          # Use merge strategy instead of rebase to handle conflicts better
-          git pull origin main --no-rebase || {
-            echo "Merge conflict detected, attempting to resolve..."
-            # For CSV files, prefer the automated data (ours) over manual changes
-            git checkout --ours data/*.csv
-            git add data/*.csv
-            git commit --no-edit
-          }
-          git push origin main
-        fi
+#         git add data/*.csv
+#         if git diff --staged --quiet; then
+#           echo "No changes to commit"
+#         else
+#           git commit -m "Update portfolio tracking data - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+#           # Use merge strategy instead of rebase to handle conflicts better
+#           git pull origin main --no-rebase || {
+#             echo "Merge conflict detected, attempting to resolve..."
+#             # For CSV files, prefer the automated data (ours) over manual changes
+#             git checkout --ours data/*.csv
+#             git add data/*.csv
+#             git commit --no-edit
+#           }
+#           git push origin main
+#         fi
 
-    - name: Upload tracking data and logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: portfolio-tracker-data-${{ github.run_number }}
-        path: |
-          data/
-          *.log
-        retention-days: 30
+#     - name: Upload tracking data and logs
+#       if: always()
+#       uses: actions/upload-artifact@v4
+#       with:
+#         name: portfolio-tracker-data-${{ github.run_number }}
+#         path: |
+#           data/
+#           *.log
+#         retention-days: 30
 
-    - name: Notify on failure
-      if: failure()
-      uses: actions/github-script@v6
-      with:
-        script: |
-          // Create a workflow run comment instead of issue comment
-          console.log('❌ Portfolio tracking workflow failed!');
-          console.log('Run ID:', context.runId);
-          console.log('Check the logs for details at:', `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`);
+#     - name: Notify on failure
+#       if: failure()
+#       uses: actions/github-script@v6
+#       with:
+#         script: |
+#           // Create a workflow run comment instead of issue comment
+#           console.log('❌ Portfolio tracking workflow failed!');
+#           console.log('Run ID:', context.runId);
+#           console.log('Check the logs for details at:', `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`);
           
-          // Optionally create a repository dispatch event for notifications
-          try {
-            await github.rest.repos.createDispatchEvent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              event_type: 'portfolio-tracking-failed',
-              client_payload: {
-                run_id: context.runId,
-                message: 'Portfolio tracking workflow failed'
-              }
-            });
-          } catch (error) {
-            console.log('Could not create dispatch event:', error.message);
-          }
+#           // Optionally create a repository dispatch event for notifications
+#           try {
+#             await github.rest.repos.createDispatchEvent({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               event_type: 'portfolio-tracking-failed',
+#               client_payload: {
+#                 run_id: context.runId,
+#                 message: 'Portfolio tracking workflow failed'
+#               }
+#             });
+#           } catch (error) {
+#             console.log('Could not create dispatch event:', error.message);
+#           }
 
-  # Optional: Create a summary job
-  create-summary:
-    needs: track-prices
-    runs-on: ubuntu-latest
-    if: always()
+#   # Optional: Create a summary job
+#   create-summary:
+#     needs: track-prices
+#     runs-on: ubuntu-latest
+#     if: always()
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+#     steps:
+#     - name: Checkout repository
+#       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+#     - name: Set up Python
+#       uses: actions/setup-python@v5
+#       with:
+#         python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+#     - name: Install dependencies
+#       run: |
+#         python -m pip install --upgrade pip
+#         pip install -r requirements.txt
 
-    - name: Generate tracking summary
-      run: |
-        python -c "
-        import sys
-        sys.path.append('src')
-        from portfolio_tracker.csv_storage import CSVStorageManager
-        from datetime import datetime, timedelta
+#     - name: Generate tracking summary
+#       run: |
+#         python -c "
+#         import sys
+#         sys.path.append('src')
+#         from portfolio_tracker.csv_storage import CSVStorageManager
+#         from datetime import datetime, timedelta
         
-        storage = CSVStorageManager('data')
+#         storage = CSVStorageManager('data')
         
-        # Get recent tracking data (last 2 hours)
-        recent_tracks = storage.get_recent_price_records(hours=2)
+#         # Get recent tracking data (last 2 hours)
+#         recent_tracks = storage.get_recent_price_records(hours=2)
         
-        current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
-        print(f'📊 Portfolio Tracking Summary - {current_time}')
-        print('=' * 60)
-        print(f'✅ Items tracked: {len(recent_tracks)}')
-        print()
+#         current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+#         print(f'📊 Portfolio Tracking Summary - {current_time}')
+#         print('=' * 60)
+#         print(f'✅ Items tracked: {len(recent_tracks)}')
+#         print()
         
-        # Group by item for better display
-        items_tracked = {}
-        for track in recent_tracks:
-            item_name = track['item_name']
-            if item_name not in items_tracked:
-                items_tracked[item_name] = []
-            items_tracked[item_name].append(track)
+#         # Group by item for better display
+#         items_tracked = {}
+#         for track in recent_tracks:
+#             item_name = track['item_name']
+#             if item_name not in items_tracked:
+#                 items_tracked[item_name] = []
+#             items_tracked[item_name].append(track)
         
-        for item_name, tracks in items_tracked.items():
-            # Get the most recent track for this item
-            latest_track = max(tracks, key=lambda x: x['scraped_at'])
-            status = '✅' if latest_track['scrape_status'] == 'success' else '❌'
-            price = latest_track['from_price'] or 'N/A'
-            trend = latest_track['price_trend'] or 'N/A'
-            scraped_time = latest_track['scraped_at'][:16]  # Show date and time without seconds
+#         for item_name, tracks in items_tracked.items():
+#             # Get the most recent track for this item
+#             latest_track = max(tracks, key=lambda x: x['scraped_at'])
+#             status = '✅' if latest_track['scrape_status'] == 'success' else '❌'
+#             price = latest_track['from_price'] or 'N/A'
+#             trend = latest_track['price_trend'] or 'N/A'
+#             scraped_time = latest_track['scraped_at'][:16]  # Show date and time without seconds
             
-            print(f'{status} {item_name}:')
-            print(f'   💰 Price: €{price}')
-            print(f'   📈 Trend: €{trend}')
-            print(f'   🕒 Last updated: {scraped_time}')
-            print()
+#             print(f'{status} {item_name}:')
+#             print(f'   💰 Price: €{price}')
+#             print(f'   📈 Trend: €{trend}')
+#             print(f'   🕒 Last updated: {scraped_time}')
+#             print()
         
-        if not recent_tracks:
-            print('ℹ️  No recent tracking data found (last 2 hours)')
-            print('   This might be normal if tracking runs less frequently.')
-        " >> $GITHUB_STEP_SUMMARY
+#         if not recent_tracks:
+#             print('ℹ️  No recent tracking data found (last 2 hours)')
+#             print('   This might be normal if tracking runs less frequently.')
+#         " >> $GITHUB_STEP_SUMMARY
